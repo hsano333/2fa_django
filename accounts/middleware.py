@@ -1,5 +1,4 @@
 import time
-from importlib import import_module
 
 from django.conf import settings
 from django.contrib.sessions.backends.base import UpdateError
@@ -17,6 +16,10 @@ class CustomSessionMiddleware(SessionMiddleware):
     def process_request(self, request):
         tmp_session_key = request.COOKIES.get(settings.SESSION_COOKIE_NAME)
         session_key = tmp_session_key
+        is_provisional_login = False
+        jwt_decode = ""
+        exp = ""
+        user_id = "-1"
         try:
             if tmp_session_key is not None:
                 jwt_decode = jwt.decode(
@@ -26,6 +29,12 @@ class CustomSessionMiddleware(SessionMiddleware):
                     algorithms=["HS256"],
                 )
                 session_key = jwt_decode["session_key"]
+                if "is_tmp" in jwt_decode:
+                    is_provisional_login = jwt_decode["is_tmp"]
+                if "exp" in jwt_decode:
+                    exp = jwt_decode["exp"]
+                if "sub" in jwt_decode:
+                    user_id = jwt_decode["sub"]
         except jwt.ExpiredSignatureError:
             # 有効期限が過ぎたらここに入る
             pass
@@ -33,6 +42,9 @@ class CustomSessionMiddleware(SessionMiddleware):
             # デコードに失敗したら(編集されていても)ここに入る
             pass
         request.session = self.SessionStore(session_key)
+        request.session["is_provisional_login"] = is_provisional_login
+        request.session["exp"] = exp
+        request.session["user_id"] = user_id
 
     def process_response(self, request, response):
         """
@@ -78,12 +90,26 @@ class CustomSessionMiddleware(SessionMiddleware):
                             "request completed. The user may have logged "
                             "out in a concurrent request, for example."
                         )
+
+                    id = ""
+                    email = ""
+                    is_provisional_login = False
+                    exp = datetime.now(tz=timezone.utc) + timedelta(seconds=14400)
+                    if "is_provisional_login" in request.session:
+                        is_provisional_login = request.session["is_provisional_login"]
+                        if (is_provisional_login is True) and (
+                            "exp" in request.session
+                        ):
+                            exp = datetime.fromtimestamp(float(request.session["exp"]))
+                            id = request.session["user_id"]
                     jwt_session_key = jwt.encode(
                         {
                             "session_key": request.session.session_key,
                             "iss": "http://localhost",
-                            "exp": datetime.now(tz=timezone.utc)
-                            + timedelta(seconds=14400),
+                            "sub": id,
+                            "email": email,
+                            "is_tmp": is_provisional_login,
+                            "exp": exp,
                             "iat": datetime.now(tz=timezone.utc),
                         },
                         getattr(settings, "JWT_SECRET_KEY", None),

@@ -21,7 +21,7 @@ Pythonがない環境なら事前にインストールしてください
 pip install Django==5.0.6 pyjwt
 ```
 
-myjwt/setting.py内で定義されているJWT_SECRET_KEYとSECRET_KEYの入力だけしてください。
+myapp/setting.py内で定義されているJWT_SECRET_KEYとSECRET_KEYの入力だけしてください。
 JWT_SECRET_KEYはJWT内で利用する秘密鍵で、SECRET_KEYはDjangoの秘密鍵です。
 予想されずにある程度長い文字列であればなんでもいいです。
 ```python
